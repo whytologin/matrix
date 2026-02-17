@@ -30,7 +30,7 @@ app = Flask(__name__, template_folder='templates', static_folder='static')
 
 # --- EMAIL CONFIGURATION ---
 # Check if using Supabase Auth or Gmail SMTP
-USE_SUPABASE_AUTH = os.getenv('USE_SUPABASE_AUTH', 'True').lower() == 'true'
+USE_SUPABASE_AUTH = os.getenv('USE_SUPABASE_AUTH', 'False').lower() == 'true'
 
 if not USE_SUPABASE_AUTH:
     # Gmail SMTP configuration (only if not using Supabase Auth)
