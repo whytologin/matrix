@@ -74,21 +74,16 @@ if DATABASE_URL:
     if DATABASE_URL.startswith('postgres://'):
         DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
     # Remove unsupported connection options like pgbouncer that psycopg2 doesn't understand
-    from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
-    parsed = urlparse(DATABASE_URL)
-    query_params = parse_qs(parsed.query)
-    
-    # Remove pgbouncer and other unsupported params
-    for unsupported in ['pgbouncer']:
-        query_params.pop(unsupported, None)
-    
+    if '?pgbouncer=true' in DATABASE_URL:
+        DATABASE_URL = DATABASE_URL.replace('?pgbouncer=true', '')
+    if '&pgbouncer=true' in DATABASE_URL:
+        DATABASE_URL = DATABASE_URL.replace('&pgbouncer=true', '')
+        
     # Force port upgrade to 5432 (Session Mode) if it's using 6543 (Transaction Mode)
     # This fixes the "password authentication failed" error with pgbouncer
-    if parsed.port == 6543:
-        parsed = parsed._replace(netloc=parsed.netloc.replace(":6543", ":5432"))
+    if ':6543' in DATABASE_URL:
+        DATABASE_URL = DATABASE_URL.replace(':6543', ':5432')
 
-    cleaned_query = urlencode(query_params, doseq=True)
-    DATABASE_URL = urlunparse(parsed._replace(query=cleaned_query))
     app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
     logging.info("✅ Using Supabase PostgreSQL database")
 else:
