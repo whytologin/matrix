@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Architecture - AI CyberShield</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-dark: #0f111a;
+            --sidebar-bg: #161b22;
+            --card-bg: #1e232e;
+            --accent: #3b82f6;
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border: #334155;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* SIDEBAR */
+        .sidebar {
+            width: 280px;
+            background: var(--sidebar-bg);
+            border-right: 1px solid var(--border);
+            padding: 2rem;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        .brand { font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 700; color: #fff; text-decoration: none; display: block; margin-bottom: 2rem; }
+        .nav-title { font-size: 0.75rem; text-transform: uppercase; color: #666; margin: 1.5rem 0 0.5rem 0; font-weight: 700; }
+        .nav-link { display: block; padding: 8px 12px; color: var(--text-muted); text-decoration: none; border-radius: 4px; font-size: 0.9rem; margin-bottom: 2px; transition: 0.2s; }
+        .nav-link:hover { background: rgba(59, 130, 246, 0.1); color: var(--accent); }
+
+        /* CONTENT */
+        .content { margin-left: 280px; padding: 3rem 4rem; flex-grow: 1; max-width: 1400px; }
+        
+        h1 { font-size: 2.5rem; margin-bottom: 1rem; }
+        h2 { font-size: 1.6rem; color: #fff; margin-bottom: 0.5rem; }
+        p { color: var(--text-muted); line-height: 1.6; margin-bottom: 1rem; }
+
+        /* ARCHITECTURE BOXES */
+        .arch-diagram {
+            display: flex;
+            gap: 20px;
+            margin: 2rem 0;
+            flex-wrap: wrap;
+        }
+        
+        .arch-box {
+            flex: 1;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            padding: 1.5rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .arch-box i { font-size: 2rem; margin-bottom: 1rem; color: var(--accent); }
+        .arch-box h4 { margin-bottom: 0.5rem; color: #fff; }
+        .arch-box small { color: var(--text-muted); font-size: 0.85rem; }
+
+        /* TOOL GRID */
+        .tool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2rem; }
+        .tool-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            transition: transform 0.2s;
+        }
+        .tool-card:hover { transform: translateY(-2px); border-color: var(--accent); }
+
+        .tech-tag {
+            display: inline-block; padding: 4px 10px; border-radius: 50px;
+            font-size: 0.75rem; font-weight: 700; text-transform: uppercase; margin-bottom: 10px;
+        }
+        .tag-ai { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
+        .tag-rule { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+        .tag-util { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .tag-hybrid { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+
+        .algo-info { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; color: #fff; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 4px; margin-top: 10px; }
+        .algo-info i { color: var(--accent); margin-right: 8px; }
+
+    </style>
+</head>
+<body>
+
+    <aside class="sidebar">
+        <a href="{{ url_for('dashboard') }}" class="brand">/// ARCHITECTURE_DOCS</a>
+        <a href="{{ url_for('dashboard') }}" class="nav-link"><i class="fas fa-arrow-left"></i> Back to Dashboard</a>
+        
+        <div class="nav-title">System Overview</div>
+        <a href="#architecture" class="nav-link">Hybrid Architecture</a>
+        <a href="#dataflow" class="nav-link">Data Pipeline</a>
+
+        <div class="nav-title">Detection Tools</div>
+        <a href="#phishing-ai" class="nav-link">Phishing Detector</a>
+        <a href="#fake-login" class="nav-link">Fake Login Detector</a>
+        <a href="#file-scanner" class="nav-link">File & URL Scanner</a>
+        <a href="#vuln-scanner" class="nav-link">Vulnerability Scanner</a>
+
+        <div class="nav-title">AI Integrity</div>
+        <a href="#data-poison" class="nav-link">Data Poisoning</a>
+        <a href="#adversarial" class="nav-link">Adversarial Shield</a>
+        <a href="#deepfake" class="nav-link">Synthetic Media</a>
+
+        <div class="nav-title">Visibility & Behavior</div>
+        <a href="#ueba" class="nav-link">UEBA Monitor</a>
+        <a href="#email-nlp" class="nav-link">Email Analyzer</a>
+        <a href="#network" class="nav-link">Network Traffic</a>
+        <a href="#darkweb" class="nav-link">Dark Web Checker</a>
+
+        <div class="nav-title">Utilities</div>
+        <a href="#password" class="nav-link">Password Strength</a>
+        <a href="#crypto" class="nav-link">Text Encryptor</a>
+        <a href="#metadata" class="nav-link">Metadata Extractor</a>
+    </aside>
+
+    <main class="content">
+        
+        <section id="architecture">
+            <h1>Hybrid System Architecture</h1>
+            <p>
+                The CyberShield Matrix employs a <strong>Hybrid Intelligence Model</strong>. It combines the accuracy of standard logical rules with the predictive power of Artificial Intelligence.
+            </p>
+            
+            <div class="arch-diagram">
+                <div class="arch-box">
+                    <i class="fas fa-brain"></i>
+                    <h4>Tier 1: AI Models</h4>
+                    <p>Machine Learning & AI</p>
+                    <small>Used for: Phishing, Dark Web, Deepfake</small>
+                </div>
+                <div class="arch-box">
+                    <i class="fas fa-project-diagram"></i>
+                    <h4>Tier 2: Expert Rules</h4>
+                    <p>Logic-Based Systems</p>
+                    <small>Used for: Network, UEBA, Forensics</small>
+                </div>
+                <div class="arch-box">
+                    <i class="fas fa-tools"></i>
+                    <h4>Tier 3: Utilities</h4>
+                    <p>Standard Math Tools</p>
+                    <small>Used for: Encryption, Metadata, Passwords</small>
+                </div>
+            </div>
+        </section>
+
+        <section id="dataflow">
+            <h1>Data Flow Pipeline</h1>
+            <p>
+                Every user request follows a strict security pipeline ensuring data is checked properly.
+            </p>
+            
+            <div style="background: var(--card-bg); padding: 2rem; border-radius: 8px; border: 1px solid var(--border);">
+                <ol style="margin-left: 20px; line-height: 2; color: #cbd5e1;">
+                    <li><strong>User Input:</strong> User enters data into the Form or uploads a file.</li>
+                    <li><strong>Preparation:</strong> The system converts this data into a JSON format (e.g., <code>{protocol: "TCP"}</code>).</li>
+                    <li><strong>Transfer:</strong> Data is sent to the Backend Server.</li>
+                    <li><strong>Routing:</strong> The server sends the data to the correct tool script.</li>
+                    <li><strong>Processing:</strong> The tool (AI or Rule Engine) analyzes the data and finds results.</li>
+                    <li><strong>Report:</strong> Results are displayed back to the user on the dashboard.</li>
+                </ol>
+            </div>
+        </section>
+
+        <hr style="border:0; border-top:1px solid var(--border); margin: 3rem 0;">
+
+        <h1>Tool Specifications & Algorithms</h1>
+        <p>Detailed breakdown of the 14 integrated tools and their underlying logic.</p>
+
+        <div class="tool-grid">
+            
+            <div class="tool-card" id="phishing-ai">
+                <span class="tech-tag tag-ai">AI / Machine Learning</span>
+                <h2>Phishing Detector</h2>
+                <p>Classifies URLs as 'Safe' or 'Phishing' based on features like length and special characters.</p>
+                <div class="algo-info"><i class="fas fa-code-branch"></i> Algorithm: <strong>AI Pattern Matching (Decision Tree)</strong></div>
+            </div>
+
+            <div class="tool-card" id="fake-login">
+                <span class="tech-tag tag-hybrid">Hybrid (AI + Heuristic)</span>
+                <h2>Fake Login Detector</h2>
+                <p>Compares visual structure and HTML code of a login page against real sites.</p>
+                <div class="algo-info"><i class="fas fa-code-branch"></i> Algorithm: <strong>Layout & Image Comparison</strong></div>
+            </div>
+
+            <div class="tool-card" id="file-scanner">
+                <span class="tech-tag tag-hybrid">Hybrid (Reputation + Scan)</span>
+                <h2>File & URL Scanner</h2>
+                <p>Checks if a file is safe by comparing it with a database of known threats.</p>
+                <div class="algo-info"><i class="fas fa-code-branch"></i> Algorithm: <strong>Database Check & Hashing</strong></div>
+            </div>
+
+            <div class="tool-card" id="vuln-scanner">
+                <span class="tech-tag tag-rule">Static Analysis (SAST)</span>
+                <h2>Vulnerability Scanner</h2>
+                <p>Scans source code for dangerous words like "password" or "eval".</p>
+                <div class="algo-info"><i class="fas fa-code-branch"></i> Algorithm: <strong>Keyword Search (RegEx)</strong></div>
+            </div>
+
+            <div class="tool-card" id="data-poison">
+                <span class="tech-tag tag-ai">AI / Statistical</span>
+                <h2>Data Poisoning Monitor</h2>
+                <p>Detects strange data points that don't fit the normal pattern.</p>
+                <div class="algo-info"><i class="fas fa-code-branch"></i> Algorithm: <strong>Anomaly Detection</strong></div>
+            </div>
+
+            <div class="tool-card" id="adversarial">
+                <span class="tech-tag tag-ai">AI / Math</span>
+                <h2>Adversarial Attack Shield</h2>
+                <p>Identifies hidden noise in images designed to fool AI cameras.</p>
+                <div class="algo-info"><i class="fas fa-code-branch"></i> Algorithm: <strong>Image Noise Check</strong></div>
+            </div>
+
+            <div class="tool-card" id="deepfake">
+                <span class="tech-tag tag-ai">Deep Learning</span>
+                <h2>Synthetic Media (Deepfake)</h2>
+                <p>Analyzes images/video for fake parts generated by computers.</p>
+                <div class="algo-info"><i class="fas fa-code-branch"></i> Algorithm: <strong>Deep Learning (Image Scan)</strong></div>
+            </div>
+
+            <div class="tool-card" id="ueba">
+                <span class="tech-tag tag-rule">Expert System</span>
+                <h2>UEBA Monitor</h2>
+                <p>Detects if a user is acting suspiciously (e.g., logging in at 3 AM).</p>
+                <div class="algo-info"><i class="fas fa-code-branch"></i> Algorithm: <strong>User Activity Rules</strong></div>
+            </div>
+
+            <div class="tool-card" id="email-nlp">
+                <span class="tech-tag tag-hybrid">NLP + Heuristics</span>
+                <h2>Phishing Email Analyzer</h2>
+                <p>Reads email headers and words to find "Urgent" scam language.</p>
+                <div class="algo-info"><i class="fas fa-code-branch"></i> Algorithm: <strong>Text & Header Analysis</strong></div>
+            </div>
+
+            <div class="tool-card" id="network">
+                <span class="tech-tag tag-rule">Expert System</span>
+                <h2>Network Traffic Analyzer</h2>
+                <p>Inspects internet packets to stop bad connections.</p>
+                <div class="algo-info"><i class="fas fa-code-branch"></i> Algorithm: <strong>Traffic Filtering Rules</strong></div>
+            </div>
+
+            <div class="tool-card" id="darkweb">
+                <span class="tech-tag tag-ai">AI / NLP</span>
+                <h2>Dark Web Checker</h2>
+                <p>Searches text from leaked databases to find stolen info.</p>
+                <div class="algo-info"><i class="fas fa-code-branch"></i> Algorithm: <strong>Smart Text Search</strong></div>
+            </div>
+
+            <div class="tool-card" id="password">
+                <span class="tech-tag tag-util">Utility / Math</span>
+                <h2>Password Strength</h2>
+                <p>Calculates how hard it is to guess a password.</p>
+                <div class="algo-info"><i class="fas fa-code-branch"></i> Algorithm: <strong>Complexity Check</strong></div>
+            </div>
+
+            <div class="tool-card" id="crypto">
+                <span class="tech-tag tag-util">Utility / Crypto</span>
+                <h2>Text Encryptor</h2>
+                <p>Converts text into secret codes using standard math.</p>
+                <div class="algo-info"><i class="fas fa-code-branch"></i> Algorithm: <strong>Standard Encryption (AES)</strong></div>
+            </div>
+
+            <div class="tool-card" id="metadata">
+                <span class="tech-tag tag-util">Utility / Parsing</span>
+                <h2>Metadata Extractor</h2>
+                <p>Reads hidden information inside files (like GPS in photos).</p>
+                <div class="algo-info"><i class="fas fa-code-branch"></i> Algorithm: <strong>Hidden Data Reader</strong></div>
+            </div>
+
+        </div>
+
+        <footer style="margin-top: 4rem; border-top: 1px solid var(--border); padding-top: 2rem; color: #555; text-align: center;">
+            <p>&copy; 2025 AI CyberShield Matrix - System Internal Documentation</p>
+        </footer>
+
+    </main>
+</body>
+</html>
