@@ -156,7 +156,12 @@ def register():
         username = request.form['username']
         email = request.form['email']
         password = request.form['password']
-        
+
+        # ✅ FIX: Fail fast if email is not configured — prevents SMTP hang/timeout crash
+        if not app.config.get('MAIL_PASSWORD'):
+            return render_template('register.html',
+                error="Email service is not configured. Registration requires email verification. Please contact the administrator.")
+
         # Check if user already exists
         existing_user = User.query.filter_by(username=username).first()
         if existing_user:
@@ -171,10 +176,6 @@ def register():
 
         # Send Email via SendGrid
         try:
-            if mail is None:
-                return render_template('register.html', 
-                    error="Email service not configured. Please check SENDGRID_API_KEY.")
-            
             msg = Message(
                 'Verify Your Account - AI CyberShield',
                 sender=app.config.get('MAIL_DEFAULT_SENDER'),
@@ -191,9 +192,8 @@ def register():
             logging.info(f"✅ OTP email sent successfully to {email}")
 
         except Exception as e:
-            error_msg = f"Email sending failed: {str(e)}"
-            logging.error(f"❌ Email error: {error_msg}")
-            return render_template('register.html', error=error_msg)
+            logging.error(f"❌ Email error: {str(e)}")
+            return render_template('register.html', error="Failed to send verification email. Please try again later.")
 
         # Store data in session temporarily until OTP is verified
         session['temp_user'] = {
