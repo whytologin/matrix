@@ -29,32 +29,24 @@ logging.basicConfig(level=logging.INFO)
 app = Flask(__name__, template_folder='templates', static_folder='static')
 
 # --- EMAIL CONFIGURATION ---
-# Check if using Supabase Auth or Gmail SMTP
-USE_SUPABASE_AUTH = os.getenv('USE_SUPABASE_AUTH', 'False').lower() == 'true'
+USE_SUPABASE_AUTH = False
 
 if not USE_SUPABASE_AUTH:
-    # Gmail SMTP configuration (only if not using Supabase Auth)
-    app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
-    app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT', 587))
-    app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'True').lower() == 'true'
-    app.config['MAIL_USE_SSL'] = os.getenv('MAIL_USE_SSL', 'False').lower() == 'true'
-    app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
-    app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
-    
-    # Ensure MAIL_DEFAULT_SENDER is always set (fallback to MAIL_USERNAME)
-    mail_sender = os.getenv('MAIL_DEFAULT_SENDER') or os.getenv('MAIL_USERNAME')
-    app.config['MAIL_DEFAULT_SENDER'] = mail_sender
-    
-    logging.info(f"📧 Email configured: MAIL_USERNAME={app.config['MAIL_USERNAME']}, MAIL_DEFAULT_SENDER={app.config['MAIL_DEFAULT_SENDER']}")
-    
-    # Only initialize Flask-Mail if not using Supabase Auth
+    app.config['MAIL_SERVER'] = 'smtp.sendgrid.net'
+    app.config['MAIL_PORT'] = 587
+    app.config['MAIL_USE_TLS'] = True
+    app.config['MAIL_USE_SSL'] = False
+    app.config['MAIL_USERNAME'] = 'apikey'
+    app.config['MAIL_PASSWORD'] = os.getenv('SENDGRID_API_KEY')
+    app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', 'whytologin@gmail.com')
     mail = Mail(app)
-    
-    if not app.config['MAIL_USERNAME'] or not app.config['MAIL_PASSWORD']:
-        logging.warning("⚠️  MAIL_USERNAME or MAIL_PASSWORD not set in .env file. Email functionality will not work!")
+    if not app.config['MAIL_PASSWORD']:
+        logging.warning("⚠️ SENDGRID_API_KEY not set! Email will not work.")
+    else:
+        logging.info("✅ SendGrid configured successfully")
 else:
-    logging.info("✅ Using Supabase Auth for email/OTP functionality")
-    mail = None  # Not needed when using Supabase Auth
+    mail = None
+    logging.info("✅ Using Supabase Auth")
 
 # --- FILE UPLOAD CONFIGURATION ---
 UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads/')
@@ -70,27 +62,20 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev_key_CHANGE_IN_PRODUCTION
 DATABASE_URL = os.getenv('DATABASE_URL')
 
 if DATABASE_URL:
-    # Using Supabase PostgreSQL
-    # Handle postgres:// vs postgresql:// (some platforms use different prefixes)
     if DATABASE_URL.startswith('postgres://'):
         DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
-    # Remove unsupported connection options like pgbouncer that psycopg2 doesn't understand
     if '?pgbouncer=true' in DATABASE_URL:
         DATABASE_URL = DATABASE_URL.replace('?pgbouncer=true', '')
     if '&pgbouncer=true' in DATABASE_URL:
         DATABASE_URL = DATABASE_URL.replace('&pgbouncer=true', '')
-        
-    # Force port upgrade to 5432 (Session Mode) if it's using 6543 (Transaction Mode)
-    # This fixes the "password authentication failed" error with pgbouncer
     if ':6543' in DATABASE_URL:
         DATABASE_URL = DATABASE_URL.replace(':6543', ':5432')
 
     app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
     logging.info("✅ Using Supabase PostgreSQL database")
 else:
-    # Fallback to SQLite for local development
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
-    logging.warning("⚠️  DATABASE_URL not set - using SQLite fallback. Set up Supabase for production!")
+    logging.warning("⚠️ DATABASE_URL not set - using SQLite fallback.")
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
@@ -98,10 +83,8 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'pool_recycle': 300,
 }
 
-# Warn if using default secret key
 if app.config['SECRET_KEY'].startswith('dev_key'):
-    logging.warning("⚠️  Using development SECRET_KEY! Generate a secure key for production!")
-
+    logging.warning("⚠️ Using development SECRET_KEY! Set a secure key for production.")
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
@@ -163,8 +146,7 @@ def login():
             login_user(user, remember=True)
             return redirect(url_for('dashboard')) 
         else:
-            error_message = 'Invalid email or password.'
-            return render_template('login.html', error=error_message)
+            return render_template('login.html', error='Invalid email or password.')
     return render_template('login.html')
 
 # --- 1. REGISTRATION ROUTE (Step 1: Send OTP) ---
@@ -179,41 +161,45 @@ def register():
         existing_user = User.query.filter_by(username=username).first()
         if existing_user:
             return render_template('register.html', error="Username already exists.")
+        
+        existing_email = User.query.filter_by(email=email).first()
+        if existing_email:
+            return render_template('register.html', error="Email already registered.")
 
         # Generate 6-digit OTP
         otp = randint(100000, 999999)
 
-        # Send Email (with proper error handling)
+        # Send Email via SendGrid
         try:
-            if USE_SUPABASE_AUTH:
-                # TODO: Implement Supabase Auth email sending
-                # For now, show a helpful error message
+            if mail is None:
                 return render_template('register.html', 
-                    error="Supabase Auth not yet configured. Please set USE_SUPABASE_AUTH=False in .env and configure Gmail SMTP.")
-            else:
-                # Using Gmail SMTP
-                if mail is None:
-                    return render_template('register.html', 
-                        error="Email is not configured. Please check MAIL_USERNAME and MAIL_PASSWORD in .env file.")
-                
-                msg = Message('Verify Your Account - AI CyberShield', 
-                              sender=app.config.get('MAIL_DEFAULT_SENDER') or app.config.get('MAIL_USERNAME'), 
-                              recipients=[email])
-                msg.body = f"Hello {username},\n\nWelcome to AI CyberShield Matrix!\n\nYour OTP for registration is: {otp}\n\nPlease enter this code to complete your signup.\n\nRegards,\nAI CyberShield Team"
-                mail.send(msg)
-                logging.info(f"✅ OTP email sent successfully to {email}")
+                    error="Email service not configured. Please check SENDGRID_API_KEY.")
+            
+            msg = Message(
+                'Verify Your Account - AI CyberShield',
+                sender=app.config.get('MAIL_DEFAULT_SENDER'),
+                recipients=[email]
+            )
+            msg.body = (
+                f"Hello {username},\n\n"
+                f"Welcome to AI CyberShield Matrix!\n\n"
+                f"Your OTP for registration is: {otp}\n\n"
+                f"Please enter this code to complete your signup.\n\n"
+                f"Regards,\nAI CyberShield Team"
+            )
+            mail.send(msg)
+            logging.info(f"✅ OTP email sent successfully to {email}")
+
         except Exception as e:
-            # If email fails, show error on page with detailed message
             error_msg = f"Email sending failed: {str(e)}"
             logging.error(f"❌ Email error: {error_msg}")
             return render_template('register.html', error=error_msg)
 
-        # Store data in Session (Temporary storage until verified)
+        # Store data in session temporarily until OTP is verified
         session['temp_user'] = {
             'username': username,
             'email': email,
-            # FIXED: Removed method='sha256' to prevent ValueError in newer Flask versions
-            'password': generate_password_hash(password), 
+            'password': generate_password_hash(password),
             'otp': otp
         }
 
@@ -225,50 +211,39 @@ def register():
 # --- 2. OTP VERIFICATION ROUTE (Step 2: Save to DB) ---
 @app.route('/verify_otp', methods=['GET', 'POST'])
 def verify_otp():
-    # Security: If no registration data is in session, kick them back to register
     if 'temp_user' not in session:
         return redirect(url_for('register'))
 
     if request.method == 'POST':
-        # Get the OTP from the form safely
         user_otp = request.form.get('otp')
         
-        # DEBUGGING: Print what was received to your terminal
-        print(f"DEBUG: User entered OTP: '{user_otp}'")
-
-        # Check 1: Did they enter nothing?
         if not user_otp:
             return render_template('otp_verify.html', error="Please enter the OTP.")
 
         stored_data = session['temp_user']
 
         try:
-            # Check 2: Convert to integer and compare
-            # .strip() removes accidental spaces like " 123456 "
             if int(user_otp.strip()) == int(stored_data['otp']):
-                
-                # --- SUCCESS: SAVE TO DB ---
                 new_user = User(
                     username=stored_data['username'], 
                     email=stored_data['email'], 
-                    password_hash=stored_data['password'] # Already hashed
+                    password_hash=stored_data['password']
                 )
                 db.session.add(new_user)
                 db.session.commit()
                 
-                # Clear session and login
                 session.pop('temp_user', None)
                 return redirect(url_for('login'))
-            
             else:
-                return render_template('otp_verify.html', error="Wrong Code. Please check your email again.")
+                return render_template('otp_verify.html', error="Wrong code. Please check your email again.")
 
         except ValueError:
-            # This catches "abc", symbols, or weird formats
             return render_template('otp_verify.html', error="Invalid format. Please enter numbers only.")
 
     return render_template('otp_verify.html')
 
+
+# --- ADMIN ROUTES ---
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -301,7 +276,6 @@ def delete_user(user_id):
     user = User.query.get_or_404(user_id)
     if user.id == current_user.id:
         return "Error: You cannot delete your own admin account.", 400
-    
     ScanReport.query.filter_by(user_id=user.id).delete()
     db.session.delete(user)
     db.session.commit()
@@ -332,7 +306,6 @@ def view_report(report_id):
 
 
 # --- CORE APP ROUTES ---
-
 @app.route('/dashboard')
 @login_required
 def dashboard():
@@ -363,18 +336,18 @@ def run_tool(command_list, cwd=None):
             "returncode": completed.returncode
         }
     except subprocess.CalledProcessError as e:
-        error_output = e.stderr.strip() or e.stdout.strip() or 'Unknown backend error. Check stdout/stderr for clues.'
+        error_output = e.stderr.strip() or e.stdout.strip() or 'Unknown backend error.'
         return {"ok": False, "error": f"Tool failed: {error_output}", "raw_stderr": e.stderr.strip()}
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": "Tool timed out after 120s. Try a smaller file."}
     except FileNotFoundError:
-        return {"ok": False, "error": "Backend script or Python interpreter not found. Check virtual environment path."}
+        return {"ok": False, "error": "Backend script or Python interpreter not found."}
     except Exception as e:
         logging.error(f"Error running tool: {e}")
         return {"ok": False, "error": f"OS Error: {str(e)}"}
 
 
-# Tool page routes (dynamically generated)
+# Tool page routes
 pages = {
     'phishing-detector': 'phishing-detector.html', 
     'dark-web-checker': 'dark-web-checker.html',
@@ -401,7 +374,7 @@ def make_tool_route(template_name):
 for route, template in pages.items():
     app.add_url_rule(f'/{route}', view_func=make_tool_route(template), endpoint=route)
 
-# Define tool mappings for external scripts
+# Tool mappings for external scripts
 tool_map = {
     'phishing-detector': ('Phishing_Detector_Tool', 'python main.py'),
     'dark-web-checker': ('Dark_Web_Checker', 'python main.py'),
@@ -420,7 +393,7 @@ tool_map = {
 }
 
 
-# --- 1. API ROUTE FOR FILE UPLOADS ---
+# --- API ROUTE FOR FILE UPLOADS ---
 @app.route('/api/upload_file/<tool>', methods=['POST'])
 @login_required
 def api_file_upload(tool):
@@ -444,24 +417,19 @@ def api_file_upload(tool):
             return jsonify({"ok": False, "error": f"Failed to save file: {str(e)}"}), 500
         
         absolute_filepath = os.path.abspath(filepath)
-        
         folder, command = tool_map.get(tool, (None, None))
-        
         final_report_json = None
         
-        # --- LOGIC FOR EXTERNAL SCRIPT TOOLS ---
         if folder and folder != 'internal': 
             backend_base = os.path.join(os.path.dirname(__file__), 'backend')
             PYTHON_EXECUTABLE = 'python' 
             cwd = os.path.join(backend_base, folder)
             parts = shlex.split(command) 
-            
             command_list = [PYTHON_EXECUTABLE] + parts[1:]
-            command_list.append(absolute_filepath) # Pass the absolute path
+            command_list.append(absolute_filepath)
             
             result_dict = run_tool(command_list, cwd=cwd)
 
-            # Cleanup
             try:
                 os.remove(absolute_filepath) 
             except OSError as e:
@@ -473,12 +441,11 @@ def api_file_upload(tool):
                 except json.JSONDecodeError:
                     return jsonify({"ok": False, "error": "Backend script returned invalid JSON.", "raw_output": result_dict.get('stdout')}), 500
             else:
-                 return jsonify({"ok": False, "error": result_dict.get('error', 'Execution failed.'), "raw_stderr": result_dict.get('raw_stderr', '')}), 500
+                return jsonify({"ok": False, "error": result_dict.get('error', 'Execution failed.'), "raw_stderr": result_dict.get('raw_stderr', '')}), 500
         
         elif folder == 'internal':
-             return jsonify({"ok": False, "error": "This file tool is not configured correctly."}), 400
+            return jsonify({"ok": False, "error": "This file tool is not configured correctly."}), 400
 
-        # --- DATABASE PERSISTENCE ---
         if final_report_json and final_report_json.get('ok') and current_user.is_authenticated:
             try:
                 report_data_str = json.dumps(final_report_json, default=lambda o: float(o) if isinstance(o, (np.float32, np.float64, np.int32, np.int64)) else o.__dict__)
@@ -487,7 +454,7 @@ def api_file_upload(tool):
                     tool_name=final_report_json.get('tool', tool),
                     input_data_summary=f"File: {filename}",
                     risk_level=final_report_json.get('risk_level', 'N/A'),
-                    main_finding=final_report_json.get('main_finding', 'Analysis saved, finding unavailable.'),
+                    main_finding=final_report_json.get('main_finding', 'Analysis saved.'),
                     report_data=report_data_str
                 )
                 db.session.add(new_report)
@@ -499,12 +466,12 @@ def api_file_upload(tool):
         if final_report_json:
             return jsonify(final_report_json)
         else:
-             return jsonify({"ok": False, "error": "Unknown processing error."}), 500
+            return jsonify({"ok": False, "error": "Unknown processing error."}), 500
 
     return jsonify({"ok": False, "error": "File type not allowed."}), 400
 
 
-# --- 2. EXISTING API ROUTE FOR TEXT/JSON INPUTS ---
+# --- API ROUTE FOR TEXT/JSON INPUTS ---
 @app.post('/api/<tool>')
 @login_required
 def api_tool(tool):
@@ -513,15 +480,11 @@ def api_tool(tool):
     user_mode = data.get('mode', '') 
     
     final_report_json = None
-    
     folder, command = tool_map.get(tool, (None, None))
     backend_base = os.path.join(os.path.dirname(__file__), 'backend')
     
-    # --- Execute Tool (Internal or External) ---
     if folder == 'internal':
-        # --- Internal logic for Password, BugHunter, Encryptor/Hasher ---
         if command == 'password':
-            # --- START PASSWORD ANALYZER LOGIC ---
             if not user_input:
                 final_report_json = {
                     "tool": "Password Analyzer (Rule)", 
@@ -535,33 +498,32 @@ def api_tool(tool):
                 score = 0
                 features = {}
                 
-                # Rule 1: Length >= 8
                 if len(user_input) >= 8: 
                     score += 1
                     features['length_check'] = 'PASS'
-                else: features['length_check'] = 'FAIL'
+                else:
+                    features['length_check'] = 'FAIL'
 
-                # Rule 2: Uppercase
                 if re.search(r'[A-Z]', user_input): 
                     score += 1
                     features['uppercase_check'] = 'PASS'
-                else: features['uppercase_check'] = 'FAIL'
+                else:
+                    features['uppercase_check'] = 'FAIL'
                 
-                # Rule 3: Digits
                 if re.search(r'[0-9]', user_input): 
                     score += 1
                     features['digit_check'] = 'PASS'
-                else: features['digit_check'] = 'FAIL'
+                else:
+                    features['digit_check'] = 'FAIL'
 
-                # Rule 4: Special Characters
                 if re.search(r'[^A-Za-z0-9]', user_input): 
                     score += 1
                     features['special_char_check'] = 'PASS'
-                else: features['special_char_check'] = 'FAIL'
+                else:
+                    features['special_char_check'] = 'FAIL'
 
                 strength_levels = ["Very Weak", "Weak", "Medium", "Strong", "Very Strong"]
                 strength = strength_levels[score]
-                
                 confidence = float(score / 4.0) 
                 
                 final_report_json = {
@@ -576,15 +538,23 @@ def api_tool(tool):
                         "features_analyzed": features
                     }
                 }
-            # --- END PASSWORD ANALYZER LOGIC ---
 
         elif command == 'bughunter':
             issues = []
-            if "eval(" in user_input: issues.append("Use of eval() is dangerous.")
-            if "os.system" in user_input: issues.append("os.system call found — potential command injection risk.")
-            if re.search(r'password\s*=\s*["\'].*["\']', user_input): issues.append("Hardcoded password detected.")
+            if "eval(" in user_input:
+                issues.append("Use of eval() is dangerous.")
+            if "os.system" in user_input:
+                issues.append("os.system call found — potential command injection risk.")
+            if re.search(r'password\s*=\s*["\'].*["\']', user_input):
+                issues.append("Hardcoded password detected.")
             risk = "Suspicious" if issues else "Clean"
-            final_report_json = {"tool": "BugHunter", "issues_found": issues or ["No critical issues found."], "ok": True, "risk_level": risk, "main_finding": f"{len(issues)} critical issue(s) found."}
+            final_report_json = {
+                "tool": "BugHunter",
+                "issues_found": issues or ["No critical issues found."],
+                "ok": True,
+                "risk_level": risk,
+                "main_finding": f"{len(issues)} critical issue(s) found."
+            }
 
         elif command == 'encryptor':
             mode = user_mode 
@@ -593,19 +563,38 @@ def api_tool(tool):
             action = "Error"
             try:
                 data_bytes = user_input.encode('utf-8')
-                if mode == 'base64_encode': output = base64.b64encode(data_bytes).decode('utf-8'); action = "Encode (Base64)"; ok = True
-                elif mode == 'base64_decode': output = base64.b64decode(data_bytes).decode('utf-8'); action = "Decode (Base64)"; ok = True
-                elif mode == 'sha256_hash': output = hashlib.sha256(data_bytes).hexdigest(); action = "Hash (SHA-256)"; ok = True
-                else: action = "Invalid Mode Selected"; output = "Please select a valid operation mode from the list."; ok = False
+                if mode == 'base64_encode':
+                    output = base64.b64encode(data_bytes).decode('utf-8')
+                    action = "Encode (Base64)"
+                    ok = True
+                elif mode == 'base64_decode':
+                    output = base64.b64decode(data_bytes).decode('utf-8')
+                    action = "Decode (Base64)"
+                    ok = True
+                elif mode == 'sha256_hash':
+                    output = hashlib.sha256(data_bytes).hexdigest()
+                    action = "Hash (SHA-256)"
+                    ok = True
+                else:
+                    action = "Invalid Mode Selected"
+                    output = "Please select a valid operation mode from the list."
+                    ok = False
             except Exception as e:
-                output = f"Error: {str(e)}"; ok = False
+                output = f"Error: {str(e)}"
+                ok = False
             
-            risk = "N/A"
             main_finding = f"Operation '{action}' was successful." if ok else f"Operation '{action}' failed."
-            final_report_json = {"tool": "Text Encryptor/Hasher", "mode": action, "output": output, "ok": ok, "risk_level": risk, "main_finding": main_finding}
+            final_report_json = {
+                "tool": "Text Encryptor/Hasher",
+                "mode": action,
+                "output": output,
+                "ok": ok,
+                "risk_level": "N/A",
+                "main_finding": main_finding
+            }
         
         if final_report_json and not final_report_json.get('ok'):
-             return jsonify(final_report_json), 400
+            return jsonify(final_report_json), 400
         
     elif folder and command:
         PYTHON_EXECUTABLE = 'python' 
@@ -625,12 +614,12 @@ def api_tool(tool):
             except json.JSONDecodeError:
                 return jsonify({"ok": False, "error": "Backend script returned invalid JSON.", "raw_output": result_dict.get('stdout')}), 500
         else:
-             return jsonify({"ok": False, "error": result_dict.get('error', 'Execution failed.'), "raw_stderr": result_dict.get('raw_stderr', '')}), 500
+            return jsonify({"ok": False, "error": result_dict.get('error', 'Execution failed.'), "raw_stderr": result_dict.get('raw_stderr', '')}), 500
         
     else:
         final_report_json = {"ok": True, "tool": tool, "main_finding": "No server-side processing required for this tool."}
 
-    # --- Database Persistence (Logging) ---
+    # --- Database Persistence ---
     if final_report_json and final_report_json.get('ok') and current_user.is_authenticated:
         try:
             report_data_str = json.dumps(final_report_json, default=lambda o: float(o) if isinstance(o, (np.float32, np.float64, np.int32, np.int64)) else o.__dict__)
@@ -639,7 +628,7 @@ def api_tool(tool):
                 tool_name=final_report_json.get('tool', tool),
                 input_data_summary=user_input[:100] if user_input else "N/A",
                 risk_level=final_report_json.get('risk_level', 'N/A'),
-                main_finding=final_report_json.get('main_finding', 'Analysis saved, finding unavailable.'),
+                main_finding=final_report_json.get('main_finding', 'Analysis saved.'),
                 report_data=report_data_str
             )
             db.session.add(new_report)
@@ -652,7 +641,6 @@ def api_tool(tool):
 
 
 # --- INITIALIZATION ---
-# Create tables on startup (works with both flask run and gunicorn)
 with app.app_context():
     db.create_all()
 
@@ -661,7 +649,5 @@ if not os.path.exists(UPLOAD_FOLDER):
 
 # --- RUN BLOCK ---
 if __name__ == '__main__': 
-    # Use PORT from environment for Render/local dev compatibility
     port = int(os.environ.get("PORT", 5000))
-    # host='0.0.0.0' is the key to multi-device access
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=port, debug=False)
