@@ -73,6 +73,22 @@ if DATABASE_URL:
     # Handle postgres:// vs postgresql:// (some platforms use different prefixes)
     if DATABASE_URL.startswith('postgres://'):
         DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+    # Remove unsupported connection options like pgbouncer that psycopg2 doesn't understand
+    from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+    parsed = urlparse(DATABASE_URL)
+    query_params = parse_qs(parsed.query)
+    
+    # Remove pgbouncer and other unsupported params
+    for unsupported in ['pgbouncer']:
+        query_params.pop(unsupported, None)
+    
+    # Force port upgrade to 5432 (Session Mode) if it's using 6543 (Transaction Mode)
+    # This fixes the "password authentication failed" error with pgbouncer
+    if parsed.port == 6543:
+        parsed = parsed._replace(netloc=parsed.netloc.replace(":6543", ":5432"))
+
+    cleaned_query = urlencode(query_params, doseq=True)
+    DATABASE_URL = urlunparse(parsed._replace(query=cleaned_query))
     app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
     logging.info("✅ Using Supabase PostgreSQL database")
 else:
@@ -81,6 +97,10 @@ else:
     logging.warning("⚠️  DATABASE_URL not set - using SQLite fallback. Set up Supabase for production!")
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,
+    'pool_recycle': 300,
+}
 
 # Warn if using default secret key
 if app.config['SECRET_KEY'].startswith('dev_key'):
@@ -635,12 +655,17 @@ def api_tool(tool):
     return jsonify(final_report_json)
 
 
+# --- INITIALIZATION ---
+# Create tables on startup (works with both flask run and gunicorn)
+with app.app_context():
+    db.create_all()
+
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
 # --- RUN BLOCK ---
-if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-    if not os.path.exists(UPLOAD_FOLDER):
-        os.makedirs(UPLOAD_FOLDER)
-        
+if __name__ == '__main__': 
+    # Use PORT from environment for Render/local dev compatibility
+    port = int(os.environ.get("PORT", 5000))
     # host='0.0.0.0' is the key to multi-device access
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=port, debug=True)
